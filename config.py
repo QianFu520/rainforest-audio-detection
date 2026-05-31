@@ -12,3 +12,8 @@ DATA_DIR = os.path.join(PROJECT_ROOT, "data")
 
 # Input datasets (not in git — see .gitignore)
 EVENT_TABLE_PATH = os.path.join(DATA_DIR, "event_table.csv")
+CLIP_CATALOG_PATH = os.path.join(DATA_DIR, "clip_catalog.csv")
+
+# Raw audio lives outside the repo (too large to store with the project)
+AUDIO_DIR = "/Users/qian/KWF/Segmented_Foldered"
+
