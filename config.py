@@ -9,3 +9,6 @@ PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 
 # Data directory
 DATA_DIR = os.path.join(PROJECT_ROOT, "data")
+
+# Input datasets (not in git — see .gitignore)
+EVENT_TABLE_PATH = os.path.join(DATA_DIR, "event_table.csv")
