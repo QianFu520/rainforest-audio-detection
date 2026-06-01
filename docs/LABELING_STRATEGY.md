@@ -60,15 +60,37 @@ Result: **108,069 clips** labeled meaningful via birdnet_species (the ~786 named
 
 Confident meaningful labels so far: **118,940**. Remaining unknown: **512,377** (~81%).
 
-## Open problem: the unknown pool (in progress)
+## The unknown pool: finding confident negatives (in progress)
 
-The 512,377 unknown clips are those where BirdNET named no species and no simulation event occurred. This pool is **not** pure background. The listening study (see `DIAGNOSIS_LABELS.md`) established that clips of this kind frequently contain real birds and insects that BirdNET missed.
+After the two meaningful carve-outs, 512,377 clips remain unknown — clips where BirdNET named no species and no simulation event occurred. The listening study (see `DIAGNOSIS_LABELS.md`) established this pool is **not** pure background: it contains real birds and insects that BirdNET missed.
 
-No oracle is available for this pool — BirdNET has already returned "nothing" for all of them. Tools potentially available to attack it:
+The model has plenty of confident *meaningful* labels (118,940) but **zero** confident *not_meaningful* labels. A detector needs both classes. So the open problem is specifically: **how to mine confident background (not_meaningful) clips.** Two signal-based approaches were tested and rejected.
 
-- The trained CNN model itself, which flags many of these as meaningful and was ~93% correct on the clips it flagged in the listening study.
-- BirdNET's raw confidence signal (even where no species was named).
-- Targeted listening on samples.
-- Leaving the pool unknown and training only on the confident labels.
+### Rejected signal 1: BirdNET confidence
 
-The strategy for this pool is **not yet decided**. In particular, an open question is whether the model needs labels for all 631k clips, or whether a smaller high-quality labeled subset (confident meaningful + confident not_meaningful) is sufficient to train a good detector. This section will be completed once the approach is settled.
+BirdNET confidence is non-zero only when it names a species. Since all named-species clips were already carved out, every clip in the unknown pool has confidence exactly 0. The signal is a constant across the pool and carries no information for separating background from missed-bird clips. Unusable.
+
+### Rejected signal 2: model score
+
+The trained model outputs a probability (0–1) per clip. Clips it scores very low are its candidates for background. An audit of 80 unknown clips, stratified across four low-score bands (0.00–0.01, 0.01–0.03, 0.03–0.05, 0.05–0.10), 20 per band, was listened to and tagged meaningful / background.
+
+Result: **42 meaningful, 38 background — roughly half-and-half, with no purity gradient.** The lowest band (0.00–0.01, where the model is most confident the clip is background) was actually 65% meaningful (13 of 20). A stricter threshold does not help.
+
+Conclusion: the model **cannot reliably identify background.** It is a one-sided detector — good at recognizing meaningful sound (the false-positive study showed ~93% of its flagged clips were genuinely meaningful), but unreliable at the background end. The likely cause is that it was trained on contaminated negatives (the old BirdNET-<0.3 sample, itself full of missed meaningful sound), so it never learned a real concept of background. This also explains the original over-prediction problem. Model-based negative mining is rejected.
+
+### Chosen approach: harvest background from raw recordings by quiet-stretch detection
+
+Both learned signals (BirdNET, model) failed, so the chosen method is independent of both. Negatives will be harvested from the raw continuous recordings (the multi-hour WAV files the 3-second clips were segmented from):
+
+1. Compute acoustic energy (RMS) over the recording in short windows to locate continuous quiet stretches automatically.
+2. Present the quietest candidate windows for listening confirmation (spot-check a few seconds of each).
+3. For confirmed-background windows, map the time-window to all 3-second clips inside it (recording start time + offset) and label them not_meaningful — the same time-window-to-clips mechanism used for simulation events.
+
+Properties of this approach:
+- **Same-distribution:** negatives come from the same AudioMoth hardware and deployment as the positives, avoiding the source-mismatch trap that arises from importing outside audio.
+- **Independent:** relies on signal processing and human listening, not on the failed model/BirdNET signals.
+- **Reliable:** confirmed by ear in continuous context, which is more efficient and trustworthy than judging isolated clips.
+
+Known limitation: energy-based detection finds *quiet* background (nighttime silence, gentle ambience) but misses *loud* background such as heavy rain. This is acceptable — the goal is to harvest a clean batch of confident negatives, not to catch all background. Targeting is focused on low-activity recorders (e.g., Audio_Moth_3 and Audio_Moth_4, ~4–5% meaningful) and quiet time windows.
+
+This step is **not yet executed.** This section will be updated with results (windows confirmed, negative clips harvested) once the harvesting is done.
