@@ -3,14 +3,9 @@
 The model takes a single-channel mel spectrogram and outputs one
 probability (meaningful vs. not meaningful).
 
-Expected input shape: (batch, 1, 64, 128)
-    - 1 channel (mono mel spectrogram)
-    - 64 mel bins
-    - 128 time frames
-
-The classifier's first linear layer (64 * 8 * 16) assumes this input
-size: three 2x2 max-pools reduce 64x128 down to 8x16. If the input
-spectrogram shape changes, this linear layer must be updated.
+Input shape: (batch, 1, n_mels, time_frames) — any size.
+AdaptiveAvgPool2d fixes the spatial dimensions to (8, 16) before
+the classifier, so the model works regardless of spectrogram shape.
 """
 
 import torch.nn as nn
@@ -38,6 +33,7 @@ class TinyCNN(nn.Module):
             nn.MaxPool2d(2),
         )
         self.classifier = nn.Sequential(
+            nn.AdaptiveAvgPool2d((8, 16)),
             nn.Flatten(),
             nn.Linear(64 * 8 * 16, 64),
             nn.ReLU(),
