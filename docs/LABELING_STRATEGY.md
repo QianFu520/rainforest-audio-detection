@@ -58,11 +58,11 @@ Result: **108,069 clips** labeled meaningful via birdnet_species (the ~786 named
 | meaningful | birdnet_species | 108,069 |
 | meaningful | human_activity | 10,871 |
 | not_meaningful | background_energy | 94 |
-| not_meaningful | background_flatness | 2,094 |
-| unknown | unlabeled | 510,189 |
+| not_meaningful | background_flatness | 2,903 |
+| unknown | unlabeled | 509,380 |
 | **Total** | | **631,317** |
 
-Confident meaningful labels: **118,940**. Confident not_meaningful labels: **2,188**. Remaining unknown: **510,189** (~81%). Not_meaningful harvesting is in progress — all current negatives come from one recording (Audio_Moth_3, March 19 evening). The same method will be applied across all 6 recorders and all 60 raw recordings.
+Confident meaningful labels: **118,940**. Confident not_meaningful labels: **2,997**. Remaining unknown: **509,380** (~81%). Not_meaningful harvesting is in progress — current negatives come from two recordings (Audio_Moth_3 March 19 evening, Audio_Moth_1 March 17 morning). The method will be applied to additional recordings as needed to reach a sufficient training set.
 
 ## The unknown pool: finding confident negatives (in progress)
 
@@ -122,8 +122,12 @@ Sustained windows with high flatness (top 30% of the recording's own distributio
 
 These clips contain insect sound but no bird, other animal, or human activity. Per the refined not_meaningful definition above, insect-only clips are not_meaningful for this use case.
 
-**Clips labeled via flatness scan: 2,094** (source: `background_flatness`)
+**Clips labeled via flatness scan from Audio_Moth_3: 2,094** (source: `background_flatness`)
+
+**Audio_Moth_1, March 17 morning (20250317_093112.WAV, 8.48 hours):** RMS scan found 0 candidates — daytime recordings are too active throughout for any sustained quiet stretch. Flatness scan found 5 candidates, all between 16:41–17:34 (late afternoon). The two longest candidates had very high RMS (0.06–0.07) combined with high flatness — the signature of heavy rain. Spot-check confirmed heavy rain. Both accepted with trimmed starts to skip brief animal calls at the rain onset transition. Rain clips are accepted as not_meaningful because: (a) the meaningful class already contains rain + bird clips from BirdNET detections on rainy days, so the model has positive examples to learn the distinction; (b) the brief calls under heavy rain are below BirdNET's detection threshold — not worth routing.
+
+**Clips labeled via flatness scan from Audio_Moth_1: 809** (source: `background_flatness`)
 
 #### Step 3: Clip mapping
 
-For each confirmed window, the time range is mapped back to 3-second clip names by parsing the timestamp embedded in each clip filename (`Recorder_YYYYMMDD_HHMMSS.wav`) and filtering to clips within the window. The same guard used in the meaningful carve-outs applies: existing confident labels (`human_activity`, `birdnet_species`) are never overwritten.
+For each confirmed window, the time range is mapped back to 3-second clip names by parsing the timestamp embedded in each clip filename (`Recorder_YYYYMMDD_HHMMSS.wav`) and filtering to clips within the window. The same guard used in the meaningful carve-outs applies: existing confident labels (`human_activity`, `birdnet_species`) are never overwritten. Each recording's mapping cell hardcodes its own `rec_start` so it runs correctly regardless of which raw WAV file is currently loaded in the notebook.
