@@ -38,8 +38,7 @@ class TinyCNN(nn.Module):
             nn.Linear(64 * 8 * 16, 64),
             nn.ReLU(),
             nn.Dropout(0.3),
-            nn.Linear(64, 1),
-            nn.Sigmoid(),
+            nn.Linear(64, 1),  # raw logit — apply sigmoid externally for inference
         )
 
     def forward(self, x):
