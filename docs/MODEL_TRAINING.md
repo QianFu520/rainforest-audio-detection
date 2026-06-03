@@ -114,9 +114,31 @@ Val loss was stable throughout training (0.0003–0.0009), with no sign of the o
 
 **Caveat:** validation not_meaningful clips come from the same recordings as training not_meaningful clips (different 3-second windows, same acoustic conditions). A truly out-of-sample test requires running the model on recordings never seen during labeling. This is the next step.
 
+## Results: TinyCNN v2
+
+After v1, the model was run on all 509,380 unknown clips (notebook `06_inference_labeling.ipynb`). High-confidence not_meaningful predictions (AM3 at prob ≥ 0.99, all others at prob ≥ 0.95) were spot-checked by ear — 80 clips sampled, 72/80 confirmed background (90% precision). 3,500 new not_meaningful clips were labeled across all 6 recorders, covering three acoustic types: insect-only chorus, heavy rain, and river/flowing water. Total not_meaningful grew from 2,997 to 6,497.
+
+V2 was trained on 98,047 clips (92,850 meaningful + 5,197 not_meaningful). Class ratio: 18:1 (down from 40:1).
+
+| Metric | v1 | v2 |
+|---|---|---|
+| Val accuracy | 99.92% | 99.90% |
+| Not_meaningful precision | 96.9% | **98.3%** |
+| Not_meaningful recall | 99.5% | **99.6%** |
+| Not_meaningful F1 | 0.982 | **0.989** |
+| Val not_meaningful support | 600 clips | **1,300 clips** |
+
+**Confusion matrix (validation set, 27,390 clips):**
+
+|  | Predicted not_meaningful | Predicted meaningful |
+|---|---|---|
+| Actual not_meaningful | 1,295 | 5 |
+| Actual meaningful | 23 | 26,067 |
+
+Every metric improved over v1. The val set now has 1,300 not_meaningful clips from all 6 recorders — a much more robust evaluation. Val loss stable throughout (0.0002–0.0022), no overfitting. Model weights saved to `outputs/models/tinycnn_v2.pth`.
+
 ## Next steps
 
-1. **Inference on the unknown pool** — run the model on all 509,380 unknown clips, collect high-confidence not_meaningful predictions
-2. **Spot-check and label** — listen to a sample of the model's most confident not_meaningful predictions; confirmed clean clips are added to the not_meaningful training set
-3. **Retrain (v2)** — expanded not_meaningful set, more diverse, higher volume
-4. **Evaluate on truly unseen recordings** — test on a recorder/date combination not present in any labeled data
+1. **Evaluate on truly unseen recordings** — test on a recorder/date combination not present in any labeled data to verify generalization across different Costa Rican rainforest locations
+2. **Further iteration if needed** — if evaluation on unseen data reveals failures, collect targeted negatives and retrain v3
+3. **Production scripts** — once the model is validated, write clean Python scripts for the full inference pipeline
