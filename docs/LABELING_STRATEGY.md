@@ -59,10 +59,11 @@ Result: **108,069 clips** labeled meaningful via birdnet_species (the ~786 named
 | meaningful | human_activity | 10,871 |
 | not_meaningful | background_energy | 94 |
 | not_meaningful | background_flatness | 2,903 |
-| unknown | unlabeled | 509,380 |
+| not_meaningful | model_inference_v1 | 3,500 |
+| unknown | unlabeled | 505,880 |
 | **Total** | | **631,317** |
 
-Confident meaningful labels: **118,940**. Confident not_meaningful labels: **2,997**. Remaining unknown: **509,380** (~81%). Not_meaningful harvesting is in progress — current negatives come from two recordings (Audio_Moth_3 March 19 evening, Audio_Moth_1 March 17 morning). The method will be applied to additional recordings as needed to reach a sufficient training set.
+Confident meaningful labels: **118,940**. Confident not_meaningful labels: **6,497**. Remaining unknown: **505,880** (~80%).
 
 ## The unknown pool: finding confident negatives (in progress)
 
@@ -131,3 +132,23 @@ These clips contain insect sound but no bird, other animal, or human activity. P
 #### Step 3: Clip mapping
 
 For each confirmed window, the time range is mapped back to 3-second clip names by parsing the timestamp embedded in each clip filename (`Recorder_YYYYMMDD_HHMMSS.wav`) and filtering to clips within the window. The same guard used in the meaningful carve-outs applies: existing confident labels (`human_activity`, `birdnet_species`) are never overwritten. Each recording's mapping cell hardcodes its own `rec_start` so it runs correctly regardless of which raw WAV file is currently loaded in the notebook.
+
+### Model-assisted labeling (iterative expansion)
+
+After training TinyCNN v1 on the acoustic-scan negatives (2,997 clips), the model was run on all 509,380 unknown clips to find additional not_meaningful candidates. This is a self-reinforcing loop: the model trained on confirmed background labels is used to surface more background candidates from the unknown pool, which are then verified by ear and added to the training set.
+
+**Inference:** all 509,380 unknown clips were scored in one pass (~31 minutes on Apple Silicon MPS). Each clip's `not_meaningful_prob` (probability of being background) was saved to `outputs/inference_v1.csv`.
+
+**Candidate selection:** two thresholds were used based on observed precision from a spot-check audit:
+- Audio_Moth_3 clips: `not_meaningful_prob >= 0.99` (92% precision in 50-clip audit)
+- All other recorders: `not_meaningful_prob >= 0.95` (87% precision in 30-clip audit)
+
+**Spot-check audit (80 clips, 50 from AM3 + 30 from other recorders):**
+- 72/80 confirmed background (90% overall precision)
+- 8/80 tagged as meaningful (primarily faint bird sound behind insect chorus in AM3 clips)
+- Acoustic types found: insect-only chorus (AM3, nighttime), heavy rain (AM2, AM4, AM6), river/flowing water (AM3)
+- 10% label noise is acceptable at this stage — the model is robust to some noise in the negative class
+
+**Result:** 3,500 new not_meaningful clips labeled across all 6 recorders (source: `model_inference_v1`). Not_meaningful total increased from 2,997 to **6,497** — more than double, with coverage now spanning all recorders and multiple acoustic background types.
+
+**Guard:** clips already carrying a confident label (`human_activity`, `birdnet_species`, `background_energy`, `background_flatness`) were never overwritten.
