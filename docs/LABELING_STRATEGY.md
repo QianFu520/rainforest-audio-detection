@@ -61,10 +61,11 @@ Result: **108,069 clips** labeled meaningful via birdnet_species (the ~786 named
 | not_meaningful | background_flatness | 2,903 |
 | not_meaningful | model_inference_v1 | 3,500 |
 | not_meaningful | model_inference_v2 | 4,716 |
-| unknown | unlabeled | 501,164 |
+| not_meaningful | model_inference_v3 | 5,632 |
+| unknown | unlabeled | 495,532 |
 | **Total** | | **631,317** |
 
-Confident meaningful labels: **118,940**. Confident not_meaningful labels: **11,213**. Remaining unknown: **501,164** (~79%).
+Confident meaningful labels: **118,940**. Confident not_meaningful labels: **16,845**. Remaining unknown: **495,532** (~78%).
 
 ## The unknown pool: finding confident negatives (in progress)
 
@@ -182,3 +183,29 @@ AM1 and AM2 failed the 85% precision gate. The false positives were brief bird o
 **Result:** 4,716 new not_meaningful clips labeled across all 6 recorders (source: `model_inference_v2`). Not_meaningful total increased from 6,497 to **11,213**.
 
 **Guard:** existing confident labels were never overwritten. AM1/AM2 clips between 0.95–0.99 that had been incorrectly labeled in an earlier run were reverted to unknown before the final labeling pass.
+
+### Model-assisted labeling v3 (TinyCNN v3)
+
+After training TinyCNN v3 on 11,213 not_meaningful clips, the model was run on all 501,164 remaining unknown clips.
+
+**Inference:** all 501,164 unknown clips scored (~30 minutes on Apple Silicon MPS). Results saved to `outputs/inference_v3.csv`.
+
+**Per-recorder stratified audit (10 clips per recorder, 60 total at prob ≥ 0.95):**
+
+| Recorder | Background | Meaningful | Precision |
+|---|---|---|---|
+| Audio_Moth_1 | 9/10 | 1 | 90% ✓ |
+| Audio_Moth_2 | 9/10 | 1 | 90% ✓ |
+| Audio_Moth_3 | 10/10 | 0 | 100% |
+| Audio_Moth_4 | 10/10 | 0 | 100% |
+| Audio_Moth_5 | 10/10 | 0 | 100% |
+| Audio_Moth_6 | 9/10 | 1 | 90% ✓ |
+| **Overall** | **57/60** | **3** | **95%** |
+
+All 6 recorders passed the 85% gate. AM1 improved from 70% → 90% and AM2 from 80% → 90% versus the v2 audit at the same threshold — v3 is better calibrated for those locations. No per-recorder threshold split required.
+
+**Final threshold: prob ≥ 0.95 for all recorders.**
+
+**Result:** 5,632 new not_meaningful clips labeled across all 6 recorders (source: `model_inference_v3`). Not_meaningful total increased from 11,213 to **16,845**.
+
+**Guard:** existing confident labels were never overwritten.

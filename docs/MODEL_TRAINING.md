@@ -225,8 +225,28 @@ Trained on 130,153 clips (118,940 meaningful + 11,213 not_meaningful). Class rat
 
 Val loss was slightly noisier than v2 (0.0006–0.0027 across epochs vs a smoother curve in v2), likely due to the more acoustically diverse training data spanning all 6 recorders. No sign of overfitting. Model weights saved to `outputs/models/tinycnn_v3.pth`.
 
+## v3 audit results
+
+Ran v3 on all 501,164 unknown clips. Sampled 10 clips per recorder (60 total) from high-confidence not_meaningful predictions (prob ≥ 0.95) and tagged each by ear.
+
+| Recorder | Background | Meaningful | Precision |
+|---|---|---|---|
+| Audio_Moth_1 | 9/10 | 1 | 90% ✓ passed |
+| Audio_Moth_2 | 9/10 | 1 | 90% ✓ passed |
+| Audio_Moth_3 | 10/10 | 0 | 100% |
+| Audio_Moth_4 | 10/10 | 0 | 100% |
+| Audio_Moth_5 | 10/10 | 0 | 100% |
+| Audio_Moth_6 | 9/10 | 1 | 90% ✓ passed |
+| **Overall** | **57/60** | **3** | **95%** |
+
+All 6 recorders passed the 85% gate. Notably, AM1 improved from 70% → 90% and AM2 from 80% → 90% compared to the v2 audit at the same threshold — v3 is significantly better calibrated for those locations.
+
+**Final threshold: prob ≥ 0.95 for all recorders** (no per-recorder split needed).
+
+**Result:** 5,632 new not_meaningful clips labeled (source: `model_inference_v3`). Not_meaningful total increased from 11,213 to **16,845**. Unknown pool: 495,532.
+
 ## Next steps
 
-1. **Run v3 inference on the remaining 501,164 unknowns** — same process as v2 (notebook 06), with per-recorder stratified audit before labeling
-2. **Iterate if needed** — audit results will determine whether to label and retrain v4, or whether v3 is production-ready
+1. **Retrain v4** — with 16,845 not_meaningful clips, class ratio is now ~7:1 (down from 10:1 in v3). Continue iterating.
+2. **Evaluate convergence** — after v4, assess whether additional iterations are yielding meaningful gains
 3. **Production scripts** — once the model is validated, write clean Python scripts for the full inference pipeline
