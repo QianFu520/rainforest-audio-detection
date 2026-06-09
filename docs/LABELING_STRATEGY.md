@@ -60,10 +60,11 @@ Result: **108,069 clips** labeled meaningful via birdnet_species (the ~786 named
 | not_meaningful | background_energy | 94 |
 | not_meaningful | background_flatness | 2,903 |
 | not_meaningful | model_inference_v1 | 3,500 |
-| unknown | unlabeled | 505,880 |
+| not_meaningful | model_inference_v2 | 4,716 |
+| unknown | unlabeled | 501,164 |
 | **Total** | | **631,317** |
 
-Confident meaningful labels: **118,940**. Confident not_meaningful labels: **6,497**. Remaining unknown: **505,880** (~80%).
+Confident meaningful labels: **118,940**. Confident not_meaningful labels: **11,213**. Remaining unknown: **501,164** (~79%).
 
 ## The unknown pool: finding confident negatives (in progress)
 
@@ -152,3 +153,32 @@ After training TinyCNN v1 on the acoustic-scan negatives (2,997 clips), the mode
 **Result:** 3,500 new not_meaningful clips labeled across all 6 recorders (source: `model_inference_v1`). Not_meaningful total increased from 2,997 to **6,497** — more than double, with coverage now spanning all recorders and multiple acoustic background types.
 
 **Guard:** clips already carrying a confident label (`human_activity`, `birdnet_species`, `background_energy`, `background_flatness`) were never overwritten.
+
+### Model-assisted labeling v2 (TinyCNN v2)
+
+After training TinyCNN v2 on 6,497 not_meaningful clips, the model was run on all 505,880 remaining unknown clips to find additional not_meaningful candidates. V2 improved on v1 (F1 0.989 vs 0.982, precision 98.3% vs 96.9%) and was trained with negatives spanning all 6 recorders.
+
+**Inference:** all 505,880 unknown clips were scored (~30 minutes on Apple Silicon MPS). Results saved to `outputs/inference_v2.csv`.
+
+**Per-recorder stratified audit:** rather than sampling from AM3 heavily (as in v1), 10 clips were sampled from each of the 6 recorders (60 total) from candidates at prob ≥ 0.95. Equal sampling ensures recorder-specific failure modes are caught — recorders with fewer training labels are the highest risk.
+
+| Recorder | Background | Meaningful | Precision at 0.95 |
+|---|---|---|---|
+| Audio_Moth_1 | 7/10 | 3 | 70% ← failed |
+| Audio_Moth_2 | 8/10 | 2 | 80% ← failed |
+| Audio_Moth_3 | 10/10 | 0 | 100% |
+| Audio_Moth_4 | 10/10 | 0 | 100% |
+| Audio_Moth_5 | 9/10 | 1 | 90% |
+| Audio_Moth_6 | 10/10 | 0 | 100% |
+
+AM1 and AM2 failed the 85% precision gate. The false positives were brief bird or animal calls behind loud background noise (rain or strong insect chorus) — audible to a human ear but short and partially masked.
+
+**AM1/AM2 re-audit at prob ≥ 0.99:** 10 clips each sampled at the stricter threshold. Both passed (90% precision — 9/10 background each). The remaining false positives were one human voice clip and one brief bird call, genuine edge cases.
+
+**Final thresholds:**
+- Audio_Moth_1, Audio_Moth_2: `not_meaningful_prob >= 0.99`
+- Audio_Moth_3, Audio_Moth_4, Audio_Moth_5, Audio_Moth_6: `not_meaningful_prob >= 0.95`
+
+**Result:** 4,716 new not_meaningful clips labeled across all 6 recorders (source: `model_inference_v2`). Not_meaningful total increased from 6,497 to **11,213**.
+
+**Guard:** existing confident labels were never overwritten. AM1/AM2 clips between 0.95–0.99 that had been incorrectly labeled in an earlier run were reverted to unknown before the final labeling pass.
