@@ -202,8 +202,31 @@ Both passed. The 2 remaining false positives were: one clip with a human voice, 
 
 Labels remaining as unknown: 501,164.
 
+## Results: TinyCNN v3
+
+Trained on 130,153 clips (118,940 meaningful + 11,213 not_meaningful). Class ratio: ~10:1 (down from 18:1 in v2). `pos_weight` adjusted automatically to 0.097.
+
+| Metric | v1 | v2 | v3 |
+|---|---|---|---|
+| Val accuracy | 99.92% | 99.90% | 99.80% |
+| Not_meaningful precision | 96.9% | 98.3% | **98.0%** |
+| Not_meaningful recall | 99.5% | 99.6% | **100%** |
+| Not_meaningful F1 | 0.982 | 0.989 | **0.990** |
+| Val not_meaningful support | 600 | 1,300 | **2,243** |
+
+**Confusion matrix (validation set, 28,333 clips):**
+
+|  | Predicted not_meaningful | Predicted meaningful |
+|---|---|---|
+| Actual not_meaningful | 2,243 | 0 |
+| Actual meaningful | 46 | 26,044 |
+
+**Key improvement over v2:** recall reached 100% — zero not_meaningful clips missed. The trade-off is 46 meaningful clips incorrectly filtered (vs 23 in v2), but that is only 0.18% of meaningful clips. The val not_meaningful support nearly doubled (2,243 vs 1,300), making this the most trustworthy evaluation so far.
+
+Val loss was slightly noisier than v2 (0.0006–0.0027 across epochs vs a smoother curve in v2), likely due to the more acoustically diverse training data spanning all 6 recorders. No sign of overfitting. Model weights saved to `outputs/models/tinycnn_v3.pth`.
+
 ## Next steps
 
-1. **Retrain v3** — with 11,213 not_meaningful clips (up from 6,497 in v2), the class ratio has improved from 18:1 to ~10:1. Retrain and evaluate.
-2. **Iterate** — run v3 inference on the remaining 501,164 unknowns, audit, label, and retrain if needed
+1. **Run v3 inference on the remaining 501,164 unknowns** — same process as v2 (notebook 06), with per-recorder stratified audit before labeling
+2. **Iterate if needed** — audit results will determine whether to label and retrain v4, or whether v3 is production-ready
 3. **Production scripts** — once the model is validated, write clean Python scripts for the full inference pipeline
