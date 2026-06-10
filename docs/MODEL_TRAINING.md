@@ -245,8 +245,38 @@ All 6 recorders passed the 85% gate. Notably, AM1 improved from 70% → 90% and 
 
 **Result:** 5,632 new not_meaningful clips labeled (source: `model_inference_v3`). Not_meaningful total increased from 11,213 to **16,845**. Unknown pool: 495,532.
 
+## Results: TinyCNN v4
+
+Trained on 135,785 clips (118,940 meaningful + 16,845 not_meaningful). Class ratio: ~7:1. `pos_weight`: 0.145.
+
+| Metric | v1 | v2 | v3 | v4 |
+|---|---|---|---|---|
+| Val accuracy | 99.92% | 99.90% | 99.80% | 99.61% |
+| Not_meaningful precision | 96.9% | 98.3% | **98.0%** | 96.7% |
+| Not_meaningful recall | 99.5% | 99.6% | **100%** | **100%** |
+| Not_meaningful F1 | 0.982 | 0.989 | **0.990** | 0.983 |
+| Val not_meaningful support | 600 | 1,300 | 2,243 | 3,369 |
+
+**Confusion matrix (validation set, 29,459 clips):**
+
+|  | Predicted not_meaningful | Predicted meaningful |
+|---|---|---|
+| Actual not_meaningful | 3,369 | 0 |
+| Actual meaningful | 116 | 25,974 |
+
+**V4 shows diminishing returns and slight regression.** Recall held at 100%, but precision dropped from 98.0% to 96.7% and F1 regressed from 0.990 to 0.983. The number of meaningful clips incorrectly filtered rose from 46 to 116. This is a known pattern in iterative self-labeling: each round introduces ~5% label noise, and after enough iterations that noise begins to accumulate and hurt precision.
+
+**Decision: v3 is the final production model.** V4 confirms the iterative loop has converged — adding more self-labeled data no longer improves the model. Model weights saved to `outputs/models/tinycnn_v4.pth` for reference.
+
+## Final model: TinyCNN v3
+
+- **Weights:** `outputs/models/tinycnn_v3.pth`
+- **Not_meaningful precision:** 98.0% — 2% of clips the model filters out are actually meaningful
+- **Not_meaningful recall:** 100% — no real background clip is missed
+- **F1:** 0.990
+- **Training data:** 11,213 not_meaningful + 118,940 meaningful (10:1 ratio)
+
 ## Next steps
 
-1. **Retrain v4** — with 16,845 not_meaningful clips, class ratio is now ~7:1 (down from 10:1 in v3). Continue iterating.
-2. **Evaluate convergence** — after v4, assess whether additional iterations are yielding meaningful gains
-3. **Production scripts** — once the model is validated, write clean Python scripts for the full inference pipeline
+1. **Production scripts** — write clean Python scripts for the full inference pipeline using v3
+2. **Final inference run** — use v3 to label the remaining 495,532 unknown clips for downstream BirdNET processing
