@@ -58,14 +58,83 @@ df = result.to_dataframe()  # columns: input, start_time, end_time, species_name
 
 `model.predict()` returns an `AcousticFilePredictionResult`. Use `.to_dataframe()` — the result object is not directly iterable.
 
+## Conversion findings
+
+### Jupyter + TFLite converter incompatibility on macOS
+
+The TFLite converter spawns internal subprocesses during graph transformation. On macOS, these subprocesses conflict with Jupyter's event loop and signal handling, causing the kernel to hang indefinitely — both for dynamic range quantization and full INT8 conversion with a calibration dataset. The conversion completes in ~11 seconds when run as a standalone Python script outside Jupyter.
+
+**Workaround:** the conversion cell in `08_birdnet_ptq.ipynb` uses `subprocess.run` to invoke a standalone script (`scripts/convert_birdnet_ptq.py`), then loads the resulting `.tflite` file back into the notebook for evaluation.
+
+### Full INT8 calibration speed
+
+Full INT8 PTQ requires running each calibration clip through the full FP32 SavedModel on CPU to collect activation statistics. On an M4 Mac without `tensorflow-metal`, TF SavedModel inference runs on CPU only (~20 seconds per clip). 100 clips × ~20s = ~33 minutes — slow but not stuck. This is a hardware constraint, not a bug. `tensorflow-metal` would accelerate this but is not currently installed in the `ds` environment.
+
+### Dynamic range quantization result
+
+Dynamic range quantization — weights quantized to INT8, activations remain float32 at runtime:
+
+| Variant | Size | Reduction |
+|---|---|---|
+| FP32 TFLite (baseline) | 51.7 MB | — |
+| Dynamic range INT8 TFLite (ours) | 14.2 MB | 72.5% |
+
+Conversion time: 11 seconds as a standalone script (M4 Mac, CPU only).
+
+**Prediction quality: wrong.** Sanity check on the test clip returned Madagascar Scops-Owl as top-1; FP32 returns Spotted Antbird. See investigation below.
+
+### Calibrated INT8 PTQ result
+
+Full INT8 PTQ — weights and activations both INT8, scale factors from 100 calibration clips:
+
+| Variant | Size | Reduction |
+|---|---|---|
+| FP32 TFLite (baseline) | 51.7 MB | — |
+| Calibrated INT8 TFLite (ours) | 14.1 MB | 72.8% |
+
+Conversion time: ~2 minutes via standalone script in TF 2.15.
+
+**Prediction quality: wrong.** 500-clip spot check: 0/500 top-1 agreement (0.0%). Two models cannot disagree on 100% of 500 clips by chance — this is a definitive failure.
+
+### Why INT8 PTQ fails for this model
+
+Both dynamic range and calibrated INT8 produce wrong predictions despite the SavedModel → FP32 TFLite conversion giving correct results. The conversion pipeline itself is not the issue.
+
+Investigation confirmed that the **official Zenodo INT8 model was not built with PTQ**. Its tensor names contain `FakeQuantWithMinMaxVars` and `quant_`-prefixed operations — artifacts of **quantization-aware training (QAT)**, where the model is retrained with fake quantization nodes inserted during training. QAT teaches the model to be numerically robust to INT8 precision; PTQ applies quantization to a model that was never trained with this constraint.
+
+Key evidence from tensor inspection:
+
+| Model | INT8 tensors | float32 tensors | Quality |
+|---|---|---|---|
+| Official INT8 (Zenodo QAT) | 139 | 345 | correct |
+| Our calibrated INT8 (PTQ) | 372 | 15 | 0% agreement |
+| Our dynamic range (PTQ) | 77 | 343 | wrong |
+
+The official INT8 quantizes only the QAT-prepared backbone layers; our PTQ converts more ops including sensitive ones. Reproducing the official INT8 would require BirdNET's training code and dataset — not feasible from the public SavedModel.
+
+**Next approach:** 16x8 PTQ — weights INT8, activations INT16. TFLite's `EXPERIMENTAL_TFLITE_BUILTINS_ACTIVATIONS_INT16_WEIGHTS_INT8` mode is designed for audio/spectrogram models sensitive to INT8 activation quantization. Expected size: ~14 MB (INT8 weights). Requires calibration.
+
+### `conda run -n tf215` environment note
+
+The `tf215` conda environment was created to work around TF 2.20's SavedModel loading hang on M4 Mac. However, `conda run -n tf215` silently falls back to the `ds` environment when called from a subprocess — confirmed by `sys.prefix` pointing to the `ds` path and `tf.__version__` returning 2.20.0.
+
+All conversions in this project ran under TF 2.20, not TF 2.15, despite the `tf215` environment being specified. The correct invocation uses the binary directly:
+
+```
+/Users/qian/miniforge3/envs/tf215/bin/python scripts/convert_birdnet_ptq.py
+```
+
 ## Current state
 
 | Step | Status |
 |---|---|
 | FP32 SavedModel downloaded and verified | done |
 | Baseline notebook (07_birdnet_baseline.ipynb) | done |
-| PTQ int8 conversion | next |
-| Calibration dataset selection | next |
-| Agreement evaluation on 108,069 clips | next |
+| Notebook restructured to use subprocess for conversion | done |
+| Dynamic range INT8 conversion | done — 14.2 MB, 72.5% reduction, wrong predictions |
+| Calibrated INT8 PTQ | done — 14.1 MB, 72.8% reduction, 0% top-1 agreement |
+| INT8 PTQ investigation | done — official INT8 is QAT; standard PTQ not viable |
+| 16x8 PTQ (INT8 weights, INT16 activations) | next |
+| Agreement evaluation on 108,069 clips | blocked on working compressed model |
 | MLflow experiment tracking | next |
 | Latency benchmark | next |
