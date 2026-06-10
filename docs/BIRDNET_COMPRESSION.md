@@ -112,7 +112,22 @@ Key evidence from tensor inspection:
 
 The official INT8 quantizes only the QAT-prepared backbone layers; our PTQ converts more ops including sensitive ones. Reproducing the official INT8 would require BirdNET's training code and dataset — not feasible from the public SavedModel.
 
-**Next approach:** 16x8 PTQ — weights INT8, activations INT16. TFLite's `EXPERIMENTAL_TFLITE_BUILTINS_ACTIVATIONS_INT16_WEIGHTS_INT8` mode is designed for audio/spectrogram models sensitive to INT8 activation quantization. Expected size: ~14 MB (INT8 weights). Requires calibration.
+**16x8 PTQ also fails.** Weights INT8, activations INT16 (`EXPERIMENTAL_TFLITE_BUILTINS_ACTIVATIONS_INT16_WEIGHTS_INT8`), 100-clip calibration. 14.4 MB, 72.2% reduction. Sanity check: Variegated Antpitta as top-1 (wrong). The INT16 activations do not help because the root cause is the INT8 *weight* quantization rounding small mel filterbank values to zero — not the activation precision.
+
+**Working approach: FP16 PTQ.** Weights stored as float16, used as float32 at runtime. No calibration needed. Float16 preserves the mel filterbank values accurately (~3.3 decimal digits vs INT8's ~2.1). See FP16 result section below.
+
+### FP16 PTQ result
+
+FP16 quantization — weights stored as float16, activations and runtime computation remain float32:
+
+| Variant | Size | Reduction | Top-1 agreement (500 clips) |
+|---|---|---|---|
+| FP32 TFLite (baseline) | 51.7 MB | — | — |
+| FP16 TFLite (ours) | 26.0 MB | 49.8% | **500/500 = 100%** |
+
+Conversion time: ~10 seconds as a standalone script (no calibration). Output: `outputs/models/birdnet_v2.4_fp16.tflite`.
+
+100% top-1 agreement confirms FP16 is numerically equivalent to FP32 for this model. The 49.8% size reduction comes entirely from halving the weight storage (float32 → float16); inference runs in float32.
 
 ### `conda run -n tf215` environment note
 
@@ -134,7 +149,8 @@ All conversions in this project ran under TF 2.20, not TF 2.15, despite the `tf2
 | Dynamic range INT8 conversion | done — 14.2 MB, 72.5% reduction, wrong predictions |
 | Calibrated INT8 PTQ | done — 14.1 MB, 72.8% reduction, 0% top-1 agreement |
 | INT8 PTQ investigation | done — official INT8 is QAT; standard PTQ not viable |
-| 16x8 PTQ (INT8 weights, INT16 activations) | next |
-| Agreement evaluation on 108,069 clips | blocked on working compressed model |
+| 16x8 PTQ (INT8 weights, INT16 activations) | done — 14.4 MB, 72.2% reduction, wrong predictions |
+| FP16 PTQ | done — 26.0 MB, 49.8% reduction, 500/500 = 100% top-1 agreement |
+| Agreement evaluation on 108,069 clips | next |
 | MLflow experiment tracking | next |
 | Latency benchmark | next |
