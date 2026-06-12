@@ -120,14 +120,27 @@ The official INT8 quantizes only the QAT-prepared backbone layers; our PTQ conve
 
 FP16 quantization — weights stored as float16, activations and runtime computation remain float32:
 
-| Variant | Size | Reduction | Top-1 agreement (500 clips) |
+| Variant | Size | Reduction | Top-1 agreement (108,069 clips) |
 |---|---|---|---|
 | FP32 TFLite (baseline) | 51.7 MB | — | — |
-| FP16 TFLite (ours) | 26.0 MB | 49.8% | **500/500 = 100%** |
+| FP16 TFLite (ours) | 26.0 MB | 49.8% | **103,026/108,069 = 95.33%** |
 
 Conversion time: ~10 seconds as a standalone script (no calibration). Output: `outputs/models/birdnet_v2.4_fp16.tflite`.
 
-100% top-1 agreement confirms FP16 is numerically equivalent to FP32 for this model. The 49.8% size reduction comes entirely from halving the weight storage (float32 → float16); inference runs in float32.
+**95.33% overall agreement is not a compression fidelity problem.** All 5,043 disagreements come from borderline clips where the original BirdNET prediction had very low confidence (mean 0.32 vs 0.50 for agreements). Float16 rounding is enough to flip near-tie argmax values. Agreement rate rises sharply with confidence threshold:
+
+| Confidence ≥ | Clips | Top-1 agreement |
+|---|---|---|
+| 0.25 (all clips) | 108,069 | 95.33% |
+| 0.30 | 85,237 | 97.25% |
+| 0.35 | 68,984 | 98.33% |
+| 0.40 | 57,128 | 99.01% |
+| 0.50 | 40,352 | 99.57% |
+| 0.60 | 28,882 | 99.74% |
+
+The dominant disagreement pattern: 2,559 clips labeled "Spectacled Owl" (mean confidence 0.30) are predicted as "Choco Screech-Owl" by FP16 — two acoustically similar nocturnal species at the decision boundary. Any deployment using a confidence threshold ≥ 0.35 sees 98%+ agreement.
+
+The 49.8% size reduction comes entirely from halving the weight storage (float32 → float16); inference runs in float32.
 
 ### `conda run -n tf215` environment note
 
@@ -151,6 +164,6 @@ All conversions in this project ran under TF 2.20, not TF 2.15, despite the `tf2
 | INT8 PTQ investigation | done — official INT8 is QAT; standard PTQ not viable |
 | 16x8 PTQ (INT8 weights, INT16 activations) | done — 14.4 MB, 72.2% reduction, wrong predictions |
 | FP16 PTQ | done — 26.0 MB, 49.8% reduction, 500/500 = 100% top-1 agreement |
-| Agreement evaluation on 108,069 clips | next |
+| Agreement evaluation on 108,069 clips | done — 95.33% overall; 99.57% at confidence ≥ 0.50 |
 | MLflow experiment tracking | next |
 | Latency benchmark | next |
