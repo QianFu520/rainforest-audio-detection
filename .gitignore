@@ -16,6 +16,7 @@ __pycache__/
 # 3. Jupyter notebook auto-saves
 # ============================================================
 .ipynb_checkpoints/
+mlruns/
 
 # ============================================================
 # 4. macOS hidden files
