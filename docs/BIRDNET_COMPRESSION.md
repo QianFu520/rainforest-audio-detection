@@ -142,6 +142,29 @@ The dominant disagreement pattern: 2,559 clips labeled "Spectacled Owl" (mean co
 
 The 49.8% size reduction comes entirely from halving the weight storage (float32 → float16); inference runs in float32.
 
+### FP16 PTQ vs official INT8 QAT comparison
+
+Both models measured against the same FP32 reference (stored `birdnet_species` labels), making this a direct apples-to-apples comparison:
+
+| Model | Size | Reduction | Top-1 agreement vs FP32 |
+|---|---|---|---|
+| FP32 TFLite (baseline) | 51.7 MB | — | 100% |
+| Official INT8 QAT (Zenodo) | 41.0 MB | 20.7% | 89.64% |
+| **Our FP16 PTQ** | **26.0 MB** | **49.8%** | **95.33%** |
+
+Our FP16 PTQ is 15 MB smaller than the official INT8 and 5.7 percentage points closer to FP32. FP16 leads at every confidence threshold:
+
+| Confidence ≥ | Clips | FP16 agreement | INT8 agreement |
+|---|---|---|---|
+| 0.25 (all clips) | 108,069 | 95.33% | 89.64% |
+| 0.30 | 85,237 | 97.25% | 92.60% |
+| 0.35 | 68,984 | 98.33% | 94.72% |
+| 0.40 | 57,128 | 99.01% | 96.18% |
+| 0.50 | 40,352 | 99.57% | 97.93% |
+| 0.60 | 28,882 | 99.74% | 98.81% |
+
+The INT8 gap is not fully explained by borderline clips — QAT introduces more structural changes to the model's decision boundaries than FP16 weight rounding does. FP16 PTQ is the better artifact: smaller, more faithful to the FP32 reference, and produced in ~10 seconds with no calibration data.
+
 ### `conda run -n tf215` environment note
 
 The `tf215` conda environment was created to work around TF 2.20's SavedModel loading hang on M4 Mac. However, `conda run -n tf215` silently falls back to the `ds` environment when called from a subprocess — confirmed by `sys.prefix` pointing to the `ds` path and `tf.__version__` returning 2.20.0.
@@ -165,5 +188,6 @@ All conversions in this project ran under TF 2.20, not TF 2.15, despite the `tf2
 | 16x8 PTQ (INT8 weights, INT16 activations) | done — 14.4 MB, 72.2% reduction, wrong predictions |
 | FP16 PTQ | done — 26.0 MB, 49.8% reduction, 500/500 = 100% top-1 agreement |
 | Agreement evaluation on 108,069 clips | done — 95.33% overall; 99.57% at confidence ≥ 0.50 |
+| FP16 vs official INT8 QAT comparison | done — FP16 wins on both size (26 MB vs 41 MB) and fidelity (95.33% vs 89.64%) |
 | MLflow experiment tracking | next |
 | Latency benchmark | next |
