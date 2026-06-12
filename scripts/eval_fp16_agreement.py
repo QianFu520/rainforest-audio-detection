@@ -5,8 +5,6 @@ BirdNET predictions in labels_progress.csv on all birdnet_species clips.
 FP32 predictions are already stored in the `species` column from when the clips
 were originally labeled — no need to re-run FP32. We only run FP16 TFLite.
 
-Usage:
-    python scripts/eval_fp16_agreement.py [output_csv]
 
 Output CSV columns: clip_name, fp32_species, fp16_species, agree
 """
