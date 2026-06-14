@@ -189,5 +189,5 @@ All conversions in this project ran under TF 2.20, not TF 2.15, despite the `tf2
 | FP16 PTQ | done — 26.0 MB, 49.8% reduction, 500/500 = 100% top-1 agreement |
 | Agreement evaluation on 108,069 clips | done — 95.33% overall; 99.57% at confidence ≥ 0.50 |
 | FP16 vs official INT8 QAT comparison | done — FP16 wins on both size (26 MB vs 41 MB) and fidelity (95.33% vs 89.64%) |
-| MLflow experiment tracking | done — sqlite backend at outputs/mlflow.db; experiments: tinycnn_binary_filter (4 runs), birdnet_compression (5 runs incl. official INT8 reference) |
+| MLflow experiment tracking | done — sqlite backend at outputs/mlflow.db; experiments: tinycnn_binary_filter (4 runs), birdnet_compression (6 runs incl. fp32_baseline + official INT8 reference); fidelity metric: `top1_fidelity` |
 | Latency benchmark | next |
