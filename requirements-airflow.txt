@@ -1,0 +1,9 @@
+# Airflow orchestration dependencies (airflow conda environment, Python 3.11)
+# Install: pip install -r requirements-airflow.txt \
+#            --constraint "https://raw.githubusercontent.com/apache/airflow/constraints-2.9.3/constraints-3.11.txt"
+
+apache-airflow==2.9.3
+apache-airflow-providers-amazon==8.25.0
+
+# AWS SDK (pinned by Airflow constraints)
+boto3==1.34.131

@@ -1,0 +1,25 @@
+# ML / data science dependencies (ds conda environment, Python 3.11)
+# Install: pip install -r requirements.txt
+
+# Deep learning
+torch==2.2.2
+tensorflow==2.20.0
+
+# Experiment tracking
+mlflow==3.13.0
+
+# BirdNET acoustic model interface
+birdnet==0.2.11
+
+# Data
+numpy==2.3.5
+pandas==2.3.3
+scikit-learn==1.8.0
+
+# Audio
+soundfile==0.13.1
+librosa==0.11.0
+
+# Visualisation / notebooks
+matplotlib==3.10.8
+jupyter

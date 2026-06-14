@@ -4,8 +4,6 @@ Benchmark inference latency for FP32, FP16, and INT8 BirdNET TFLite models.
 Uses synthetic random input to isolate pure inference time from file I/O.
 Appends latency_mean_ms and latency_std_ms to existing MLflow birdnet_compression runs.
 
-Usage:
-    python scripts/benchmark_latency.py
 """
 import os
 import sys
