@@ -1,0 +1,101 @@
+version: '3.8'
+
+# Rainforest audio detection — Airflow stack
+# Runs on EC2 t3.medium with LocalExecutor (no Redis/Celery needed).
+# Model weights are mounted from the host, not baked into the image.
+#
+# First-time setup:
+#   mkdir -p ./outputs/models
+#   echo "AIRFLOW_UID=$(id -u)" > .env
+#   docker compose up airflow-init
+#   docker compose up -d
+
+x-airflow-common: &airflow-common
+  image: rainforest-airflow:latest
+  environment: &airflow-common-env
+    AIRFLOW__CORE__EXECUTOR: LocalExecutor
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
+    AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW_FERNET_KEY}
+    AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
+    AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+    AIRFLOW__WEBSERVER__SECRET_KEY: ${AIRFLOW_SECRET_KEY}
+    # Pipeline config
+    BIRDNET_PIPELINE_BUCKET: ${BIRDNET_PIPELINE_BUCKET}
+    BIRDNET_PIPELINE_INPUT_PREFIX: ${BIRDNET_PIPELINE_INPUT_PREFIX:-clips/incoming}
+    BIRDNET_PIPELINE_OUTPUT_PREFIX: ${BIRDNET_PIPELINE_OUTPUT_PREFIX:-clips/results}
+    BIRDNET_PIPELINE_DYNAMO_TABLE: ${BIRDNET_PIPELINE_DYNAMO_TABLE:-birdnet-predictions}
+    BIRDNET_PIPELINE_PROJECT_DIR: /opt/rainforest-audio-detection
+    AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION:-us-east-1}
+    AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+    AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+  volumes:
+    - ./dags:/opt/airflow/dags
+    - ./logs:/opt/airflow/logs
+    - airflow_plugins:/opt/airflow/plugins
+    # Mount model weights from host — not baked into the image
+    - ./outputs/models:/opt/rainforest-audio-detection/outputs/models:ro
+  user: "${AIRFLOW_UID:-50000}:0"
+  depends_on:
+    postgres:
+      condition: service_healthy
+
+services:
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB: airflow
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "airflow"]
+      interval: 10s
+      retries: 5
+      start_period: 5s
+    restart: always
+
+  airflow-webserver:
+    <<: *airflow-common
+    command: webserver
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    restart: always
+
+  airflow-scheduler:
+    <<: *airflow-common
+    command: scheduler
+    healthcheck:
+      test: ["CMD", "airflow", "jobs", "check", "--job-type", "SchedulerJob", "--hostname", "$${HOSTNAME}"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    restart: always
+
+  airflow-init:
+    <<: *airflow-common
+    command: >
+      bash -c "
+        airflow db migrate &&
+        airflow users create
+          --username admin
+          --firstname Admin
+          --lastname User
+          --role Admin
+          --email admin@rainforest.local
+          --password ${AIRFLOW_ADMIN_PASSWORD:-admin}
+      "
+    environment:
+      <<: *airflow-common-env
+      _AIRFLOW_DB_MIGRATE: 'true'
+
+volumes:
+  postgres_data:
+  airflow_plugins:
