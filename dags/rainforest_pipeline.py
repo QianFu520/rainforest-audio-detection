@@ -188,7 +188,7 @@ with DAG(
                 n_fft=N_FFT, hop_length=HOP_LENGTH,
             )
             mel_db = librosa.power_to_db(mel, ref=np.max)
-            x = torch.from_numpy(mel_db).unsqueeze(0).unsqueeze(0)
+            x = torch.from_numpy(mel_db).float().unsqueeze(0).unsqueeze(0)
 
             with torch.no_grad():
                 prob = torch.sigmoid(model(x).squeeze()).item()
