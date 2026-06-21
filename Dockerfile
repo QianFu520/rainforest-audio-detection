@@ -26,10 +26,11 @@ RUN pip install --no-cache-dir \
     tensorflow-cpu==2.17.0
 
 # Audio + ML utilities
+# numpy pinned to <2.0 — PyTorch 2.2.2 was built before NumPy 2.0 and is incompatible with it
 RUN pip install --no-cache-dir \
+    "numpy==1.26.4" \
     librosa==0.11.0 \
     soundfile==0.13.1 \
-    numpy==2.3.5 \
     pandas==2.3.3
 
 # Copy project source code and assets into the image
