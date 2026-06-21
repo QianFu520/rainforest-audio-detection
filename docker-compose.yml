@@ -26,8 +26,7 @@ x-airflow-common: &airflow-common
     BIRDNET_PIPELINE_DYNAMO_TABLE: ${BIRDNET_PIPELINE_DYNAMO_TABLE:-birdnet-predictions}
     BIRDNET_PIPELINE_PROJECT_DIR: /opt/rainforest-audio-detection
     AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION:-us-east-1}
-    AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
-    AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+    # AWS credentials not set here — EC2 IAM instance profile provides them automatically
   volumes:
     - ./dags:/opt/airflow/dags
     - ./logs:/opt/airflow/logs
