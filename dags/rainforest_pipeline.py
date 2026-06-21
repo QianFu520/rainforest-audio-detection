@@ -268,6 +268,8 @@ with DAG(
             interp.set_tensor(inp["index"], x)
             interp.invoke()
             scores = interp.get_tensor(out["index"]).flatten()
+            # BirdNET TFLite returns raw logits — convert to probabilities
+            scores = 1.0 / (1.0 + np.exp(-scores))
 
             top_k_idx = np.argsort(scores)[::-1][:top_k]
             top_k_preds = [{"species": labels[i], "confidence": float(scores[i])} for i in top_k_idx]
