@@ -164,10 +164,14 @@ with DAG(
         model.load_state_dict(ck["model_state_dict"])
         model.eval()
 
-        SPEC_SR = 22050
-        N_MELS = 64
+        SR         = 48000  # AudioMoth native rate — must match training
+        DURATION   = 3.0
+        N_MELS     = 128
+        N_FFT      = 1024
         HOP_LENGTH = 512
-        N_FFT = 1024
+        FMIN       = 50
+        FMAX       = 16000
+        N_SAMPLES  = int(SR * DURATION)  # 144,000
 
         import librosa
 
@@ -180,12 +184,19 @@ with DAG(
             audio, sr = sf.read(wav_path)
             if audio.ndim > 1:
                 audio = audio.mean(axis=1)
-            if sr != SPEC_SR:
-                audio = librosa.resample(audio, orig_sr=sr, target_sr=SPEC_SR)
+            if sr != SR:
+                audio = librosa.resample(audio, orig_sr=sr, target_sr=SR)
+
+            # Pad or crop to exactly 3 seconds — matches training preprocessing
+            if len(audio) < N_SAMPLES:
+                audio = np.pad(audio, (0, N_SAMPLES - len(audio)))
+            else:
+                audio = audio[:N_SAMPLES]
 
             mel = librosa.feature.melspectrogram(
-                y=audio, sr=SPEC_SR, n_mels=N_MELS,
+                y=audio, sr=SR, n_mels=N_MELS,
                 n_fft=N_FFT, hop_length=HOP_LENGTH,
+                fmin=FMIN, fmax=FMAX,
             )
             mel_db = librosa.power_to_db(mel, ref=np.max)
             x = torch.from_numpy(mel_db).float().unsqueeze(0).unsqueeze(0)
