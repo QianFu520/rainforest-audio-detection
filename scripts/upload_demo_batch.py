@@ -13,12 +13,6 @@ so the demo run is reproducible and the README can cite it.
 NOTE: The batch demo measures pipeline cost reduction (how much TinyCNN filters out),
 not model accuracy. TinyCNN's ground-truth accuracy is established by v2 training
 metrics, not this run.
-
-Usage:
-    python scripts/upload_demo_batch.py [--dry-run]
-
-Options:
-    --dry-run   Print what would be uploaded and save the manifest without uploading.
 """
 
 import argparse
@@ -92,8 +86,7 @@ def main(dry_run: bool) -> None:
         if i % 100 == 0 or i == len(batch):
             print(f"  {i}/{len(batch)} uploaded")
 
-    print(f"\nDone. Trigger the DAG now:")
-    print(f"  Airflow UI → rainforest_pipeline → Trigger DAG")
+    print(f"\nDone.")
 
 
 if __name__ == "__main__":

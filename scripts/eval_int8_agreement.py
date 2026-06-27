@@ -6,9 +6,6 @@ Same reference and methodology as eval_fp16_agreement.py — both measured again
 the FP32 top-1 species stored in labels_progress.csv, so results are directly
 comparable side-by-side.
 
-Usage:
-    python scripts/eval_int8_agreement.py [output_csv]
-
 Output CSV columns: clip_name, fp32_species, int8_species, agree
 """
 import ast

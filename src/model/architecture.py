@@ -1,12 +1,3 @@
-"""TinyCNN architecture for binary audio detection.
-
-The model takes a single-channel mel spectrogram and outputs one
-probability (meaningful vs. not meaningful).
-
-Input shape: (batch, 1, n_mels, time_frames) — any size.
-AdaptiveAvgPool2d fixes the spatial dimensions to (8, 16) before
-the classifier, so the model works regardless of spectrogram shape.
-"""
 
 import torch.nn as nn
 
@@ -38,7 +29,7 @@ class TinyCNN(nn.Module):
             nn.Linear(64 * 8 * 16, 64),
             nn.ReLU(),
             nn.Dropout(0.3),
-            nn.Linear(64, 1),  # raw logit — apply sigmoid externally for inference
+            nn.Linear(64, 1),
         )
 
     def forward(self, x):

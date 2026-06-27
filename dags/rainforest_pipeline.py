@@ -27,9 +27,6 @@ from airflow.models import Variable
 from airflow.operators.python import PythonOperator
 from airflow.providers.amazon.aws.sensors.s3 import S3KeySensor
 
-# ---------------------------------------------------------------------------
-# Config from environment
-# ---------------------------------------------------------------------------
 S3_BUCKET = os.environ.get("BIRDNET_PIPELINE_BUCKET", "rainforest-audio")
 S3_INPUT_PREFIX = os.environ.get("BIRDNET_PIPELINE_INPUT_PREFIX", "clips/incoming")
 S3_OUTPUT_PREFIX = os.environ.get("BIRDNET_PIPELINE_OUTPUT_PREFIX", "clips/results")
@@ -39,9 +36,6 @@ AWS_REGION = os.environ.get("AWS_DEFAULT_REGION", "us-east-1")
 
 SCRATCH_BASE = "/tmp/birdnet_pipeline"
 
-# ---------------------------------------------------------------------------
-# DAG definition
-# ---------------------------------------------------------------------------
 default_args = {
     "owner": "airflow",
     "retries": 1,
@@ -58,23 +52,17 @@ with DAG(
     tags=["bioacoustics", "birdnet", "tinycnn"],
 ) as dag:
 
-    # -----------------------------------------------------------------------
-    # Task 1: S3KeySensor — wait for new .wav files in the input prefix
-    # -----------------------------------------------------------------------
     s3_sensor = S3KeySensor(
         task_id="s3_sensor",
         bucket_name=S3_BUCKET,
         bucket_key=f"{S3_INPUT_PREFIX}/*.wav",
         wildcard_match=True,
         aws_conn_id="aws_default",
-        mode="reschedule",          # releases worker slot between pokes
-        poke_interval=300,          # check every 5 minutes
-        timeout=60 * 60 * 6,        # give up after 6 hours
+        mode="reschedule",
+        poke_interval=300,
+        timeout=60 * 60 * 6,
     )
 
-    # -----------------------------------------------------------------------
-    # Task 2: list_new_clips — list .wav files in S3 input prefix
-    # -----------------------------------------------------------------------
     def list_new_clips(**context):
         s3 = boto3.client("s3", region_name=AWS_REGION)
         paginator = s3.get_paginator("list_objects_v2")
@@ -106,9 +94,6 @@ with DAG(
         python_callable=list_new_clips,
     )
 
-    # -----------------------------------------------------------------------
-    # Task 3: download_clips — download .wav files from S3 to scratch dir
-    # -----------------------------------------------------------------------
     def download_clips(**context):
         manifest_path = context["ti"].xcom_pull(task_ids="list_new_clips")
         with open(manifest_path) as f:
@@ -140,9 +125,6 @@ with DAG(
         python_callable=download_clips,
     )
 
-    # -----------------------------------------------------------------------
-    # Task 4: tinycnn_filter — run TinyCNN, keep only meaningful clips
-    # -----------------------------------------------------------------------
     def tinycnn_filter(**context):
         import sys
         import torch
@@ -175,7 +157,6 @@ with DAG(
 
         import librosa
 
-        # Variable values are stored as JSON strings in the Airflow UI (e.g. "0.5", "5")
         threshold = Variable.get("tinycnn_threshold", default_var=0.5, deserialize_json=True)
         manifest["tinycnn_start_at"] = datetime.now(timezone.utc).isoformat()
 
@@ -187,7 +168,6 @@ with DAG(
             if sr != SR:
                 audio = librosa.resample(audio, orig_sr=sr, target_sr=SR)
 
-            # Pad or crop to exactly 3 seconds — matches training preprocessing
             if len(audio) < N_SAMPLES:
                 audio = np.pad(audio, (0, N_SAMPLES - len(audio)))
             else:
@@ -221,9 +201,6 @@ with DAG(
         python_callable=tinycnn_filter,
     )
 
-    # -----------------------------------------------------------------------
-    # Task 5: birdnet_infer — run BirdNET FP16 on meaningful clips
-    # -----------------------------------------------------------------------
     def birdnet_infer(**context):
         import sys
         import numpy as np
@@ -306,9 +283,6 @@ with DAG(
         python_callable=birdnet_infer,
     )
 
-    # -----------------------------------------------------------------------
-    # Task 6: write_predictions — write to DynamoDB + upload CSV to S3
-    # -----------------------------------------------------------------------
     def write_predictions(**context):
         import csv
 
@@ -345,7 +319,6 @@ with DAG(
                     "top_k": json.dumps(pred["top_k"]),
                 })
 
-        # Batch summary record — one row per DAG run for stage-level reporting
         table.put_item(Item={
             "clip_id": f"BATCH#{dag_run_id}",
             "processed_at": processed_at,
@@ -378,7 +351,6 @@ with DAG(
         s3.upload_file(csv_path, S3_BUCKET, s3_key)
         print(f"Uploaded results to s3://{S3_BUCKET}/{s3_key}")
 
-        # Move processed clips out of incoming prefix so sensor won't re-trigger
         for s3_input_key in manifest["s3_keys"]:
             filename = os.path.basename(s3_input_key)
             dest_key = f"clips/processed/{dag_run_id}/{filename}"
@@ -395,9 +367,6 @@ with DAG(
         python_callable=write_predictions,
     )
 
-    # -----------------------------------------------------------------------
-    # Task 7: cleanup_temp — delete scratch dir (runs even on upstream failure)
-    # -----------------------------------------------------------------------
     def cleanup_temp(**context):
         import shutil
         scratch_dir = os.path.join(SCRATCH_BASE, context["run_id"])
@@ -413,7 +382,4 @@ with DAG(
         trigger_rule="all_done",
     )
 
-    # -----------------------------------------------------------------------
-    # Dependencies
-    # -----------------------------------------------------------------------
     s3_sensor >> list_clips_task >> download_task >> tinycnn_task >> birdnet_task >> write_task >> cleanup_task

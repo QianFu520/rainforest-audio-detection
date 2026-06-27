@@ -8,17 +8,6 @@ decimal digits of precision vs INT8's ~2.1).
 INT8-weight approaches (dynamic range, full INT8, 16x8) all fail for this model —
 the mel filterbank has small values that INT8 rounds to zero, corrupting the
 spectrogram. The official Zenodo INT8 used QAT to work around this.
-
-Must be run as a standalone script — the TFLite converter spawns subprocesses that
-conflict with Jupyter's event loop on macOS and cause the kernel to hang.
-
-Usage:
-    /Users/qian/miniforge3/envs/tf215/bin/python scripts/convert_birdnet_ptq.py [output_path]
-
-Note: `conda run -n tf215` silently falls back to the ds environment (TF 2.20).
-Use the binary path directly to ensure TF 2.15 is used.
-
-Runtime: ~10 seconds on M4 Mac (no calibration needed)
 """
 import os
 import sys

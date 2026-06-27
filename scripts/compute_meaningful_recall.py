@@ -66,10 +66,8 @@ class SpectrogramDataset(Dataset):
 
 
 def reconstruct_val_split(labels, not_meaningful_sources):
-    """Reproduce the exact val split from notebook 05_train.ipynb."""
     df = labels[labels["meaningful"] != "unknown"].copy()
 
-    # Filter not_meaningful to only sources used in this version
     meaningful_mask = df["meaningful"] == "meaningful"
     not_meaningful_mask = (df["meaningful"] == "not_meaningful") & (
         df["meaningful_source"].isin(not_meaningful_sources)
