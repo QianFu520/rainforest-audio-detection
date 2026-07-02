@@ -11,12 +11,14 @@ AudioMoth clips
 S3 (clips/incoming/)
       │  S3KeySensor
       ▼
-EC2 t3.medium (Airflow + Docker)
+EC2 t3.large (Airflow + Docker)
   ├── TinyCNN filter   (PyTorch CPU)
-  └── BirdNET FP16     (TFLite CPU)
+  ├── BirdNET FP16     (TFLite CPU)
+  └── MLflow server    (SQLite backend, Docker service)
       │
       ├── DynamoDB  ← per-clip predictions + batch summary
-      └── S3 (clips/results/)  ← predictions.csv per run
+      ├── S3 (clips/results/)  ← predictions.csv per run
+      └── MLflow  ← pipeline_monitoring experiment (drift metrics)
 ```
 
 ---
@@ -63,7 +65,7 @@ Minimum permissions needed:
 
 ### EC2 instance
 
-- **Type:** t3.medium (2 vCPU, 4 GB RAM)
+- **Type:** t3.large (2 vCPU, 8 GB RAM)
 - **AMI:** Ubuntu 22.04 LTS (`ami-0d7405d05f836d0d4`, us-east-1)
 - **IAM instance profile:** `RainforestEC2Profile`
 - **Security group inbound rules:**
@@ -237,10 +239,10 @@ All clips must be in `clips/incoming/` **before** triggering the DAG — the `li
 
 In the Airflow UI, click the play button next to `rainforest_pipeline` → **Trigger DAG**.
 
-The pipeline runs 7 tasks in sequence:
+The pipeline runs 8 tasks in sequence:
 
 ```
-s3_sensor → list_new_clips → download_clips → tinycnn_filter → birdnet_infer → write_predictions → cleanup_temp
+s3_sensor → list_new_clips → download_clips → tinycnn_filter → birdnet_infer → write_predictions → monitor_drift → cleanup_temp
 ```
 
 ### Validate with a single clip first
@@ -331,7 +333,92 @@ docker compose up -d --force-recreate airflow-webserver airflow-scheduler
 
 ---
 
-## 7. Updating the stack
+## 7. MLflow experiment tracking
+
+MLflow runs as a separate Docker service alongside Airflow. It provides a persistent experiment store for both pipeline monitoring (logged by the DAG) and model development work (logged from notebooks).
+
+### Service setup
+
+MLflow is defined in `docker-compose.yml` as a separate service using `Dockerfile.mlflow`:
+
+```dockerfile
+FROM python:3.11-slim
+RUN pip install --no-cache-dir mlflow==3.13.0
+EXPOSE 5000
+CMD ["mlflow", "server", \
+     "--host", "0.0.0.0", \
+     "--port", "5000", \
+     "--backend-store-uri", "sqlite:////mlflow/mlflow.db", \
+     "--default-artifact-root", "/mlflow/artifacts"]
+```
+
+Run data is stored in a named Docker volume (`mlflow_data`) so it survives container restarts and image rebuilds.
+
+Start the service:
+
+```bash
+docker compose up -d mlflow
+```
+
+### Accessing the MLflow UI
+
+Port 5000 is not exposed publicly (campus and corporate networks commonly block non-standard ports). Access via SSH tunnel instead:
+
+```bash
+# Open the tunnel (keep this terminal open)
+ssh -i ~/.ssh/rainforest-key.pem -L 5000:localhost:5000 ubuntu@<EC2_PUBLIC_IP>
+
+# Then open in browser
+http://localhost:5000
+```
+
+### Experiments
+
+| Experiment | Logged by | Contents |
+|---|---|---|
+| `tinycnn_binary_filter` | `notebooks/09_mlflow_tracking.ipynb` | v1–v4 training runs: params, val metrics |
+| `birdnet_compression` | `notebooks/09_mlflow_tracking.ipynb` | PTQ variants: size, top-1 fidelity at multiple confidence thresholds |
+| `pipeline_monitoring` | `monitor_drift` DAG task | Per-run: meaningful rate, delta vs baseline, drift flag, mean confidence |
+
+> **MLflow 3.x `MLFLOW_ALLOWED_HOSTS` gotcha:** MLflow 3.x validates the HTTP `Host` header on every incoming request and rejects anything not on the allowlist with a `403 Forbidden`. Accessing the UI directly via `http://<EC2_PUBLIC_IP>:5000` from a browser sends `Host: <EC2_PUBLIC_IP>:5000` — which MLflow rejects unless you add the IP to `MLFLOW_ALLOWED_HOSTS` in `docker-compose.yml`. The SSH tunnel avoids this entirely because all requests arrive with `Host: localhost`, which is always allowed.
+
+> **t3.medium → t3.large upgrade:** MLflow 3.x uses ~1.9 GB RAM at idle (FastAPI + SQLAlchemy + background workers). On a t3.medium (4 GB), adding MLflow alongside Airflow's scheduler, webserver, and postgres pushed the instance to near-OOM — tasks started getting killed silently. Upgrading to t3.large (8 GB) gave enough headroom for all services with ~2 GB to spare for actual inference workloads.
+
+> **Artifact logging from local notebooks:** `mlflow.log_artifact()` tries to write files directly to the artifact store path (`/mlflow/artifacts` inside the container). When the MLflow server is on EC2 but the notebook runs locally, the local Python process cannot reach the container filesystem — it fails with `OSError: [Errno 30] Read-only file system: '/mlflow'`. The fix is to omit `log_artifact` calls in notebooks that connect to a remote server. Model weights are stored in `outputs/models/` and tracked in git by filename — no need to duplicate them in MLflow for this project.
+
+---
+
+## 8. Drift monitoring
+
+The `monitor_drift` task (task 7 in the DAG) runs after every BirdNET inference pass and logs pipeline health metrics to the `pipeline_monitoring` MLflow experiment.
+
+### What gets logged
+
+| Metric | Description |
+|---|---|
+| `meaningful_rate` | Fraction of clips that passed TinyCNN and were inferred by BirdNET |
+| `meaningful_rate_delta` | Delta from the baseline (positive = more meaningful than expected) |
+| `drift_flag` | `1` if `abs(delta) > threshold`, else `0` |
+| `mean_top1_confidence` | Mean BirdNET top-1 confidence score across meaningful clips |
+| `n_clips_total` | Total clips in the batch |
+| `n_meaningful` | Clips that passed TinyCNN |
+
+### Baseline and threshold
+
+```python
+BASELINE_MEANINGFUL_RATE = 0.175   # established from 1000-clip demo batch (830/170 split)
+DRIFT_THRESHOLD          = 0.15    # flag if meaningful rate shifts by more than 15 percentage points
+```
+
+The baseline was set from the empirical distribution in the labeled dataset: ~17.5% of AudioMoth recordings contain meaningful bird activity. A shift larger than 15 percentage points (e.g. rate drops to 2% or rises to 33%) suggests a change in recording conditions, equipment placement, or season — worth reviewing before trusting inference results.
+
+### Viewing drift over time
+
+Open the MLflow UI (via SSH tunnel), navigate to the `pipeline_monitoring` experiment, and use the **Chart** view to plot `meaningful_rate` and `drift_flag` across runs. Each point is one DAG run.
+
+---
+
+## 9. Updating the stack
 
 After pushing code changes:
 
