@@ -28,14 +28,16 @@ EC2 t3.large (Airflow + Docker)
 | Service | URL / Command |
 |---|---|
 | Airflow UI | `http://54.166.86.66:8080` — username `admin`, password in `.env` on EC2 |
-| MLflow UI | SSH tunnel first (see below), then `http://localhost:5000` |
+| MLflow UI | SSH tunnel first (see below), then `http://localhost:5001` |
 | EC2 SSH | `ssh -i ~/.ssh/rainforest-key.pem ubuntu@54.166.86.66` |
 
 **MLflow SSH tunnel:**
 ```bash
-ssh -i ~/.ssh/rainforest-key.pem -L 5000:localhost:5000 ubuntu@54.166.86.66
+ssh -i ~/.ssh/rainforest-key.pem -L 5001:localhost:5000 ubuntu@54.166.86.66
 ```
-Keep the terminal open, then open `http://localhost:5000` in the browser.
+Keep the terminal open, then open `http://localhost:5001` in the browser.
+
+> **macOS port 5000 conflict:** macOS AirPlay Receiver listens on port 5000. Using `-L 5000:localhost:5000` silently hits AirPlay instead of MLflow — the browser gets a 403 with no indication the tunnel isn't working. Use local port 5001 to avoid the conflict.
 
 **Airflow password (if forgotten):**
 ```bash
@@ -43,7 +45,7 @@ ssh -i ~/.ssh/rainforest-key.pem ubuntu@54.166.86.66
 grep AIRFLOW_ADMIN_PASSWORD /opt/rainforest-audio-detection/.env
 ```
 
-> **EC2 public IP changes on stop/start.** If the instance is stopped and restarted, the IP will be different. Update `MLFLOW_ALLOWED_HOSTS` in `docker-compose.yml`, run `git pull` + `docker compose up -d mlflow` on EC2, and update this table.
+> **EC2 public IP changes on stop/start.** If the instance is stopped and restarted, the IP will be different. Update `MLFLOW_SERVER_ALLOWED_HOSTS` in `docker-compose.yml`, run `git pull` + `docker compose up -d mlflow` on EC2, and update this table.
 
 ---
 
@@ -390,10 +392,10 @@ Port 5000 is not exposed publicly (campus and corporate networks commonly block 
 
 ```bash
 # Open the tunnel (keep this terminal open)
-ssh -i ~/.ssh/rainforest-key.pem -L 5000:localhost:5000 ubuntu@<EC2_PUBLIC_IP>
+ssh -i ~/.ssh/rainforest-key.pem -L 5001:localhost:5000 ubuntu@<EC2_PUBLIC_IP>
 
 # Then open in browser
-http://localhost:5000
+http://localhost:5001
 ```
 
 ### Experiments
@@ -404,7 +406,9 @@ http://localhost:5000
 | `birdnet_compression` | `notebooks/09_mlflow_tracking.ipynb` | PTQ variants: size, top-1 fidelity at multiple confidence thresholds |
 | `pipeline_monitoring` | `monitor_drift` DAG task | Per-run: meaningful rate, delta vs baseline, drift flag, mean confidence |
 
-> **MLflow 3.x `MLFLOW_ALLOWED_HOSTS` gotcha:** MLflow 3.x validates the HTTP `Host` header on every incoming request and rejects anything not on the allowlist with a `403 Forbidden`. Accessing the UI directly via `http://<EC2_PUBLIC_IP>:5000` from a browser sends `Host: <EC2_PUBLIC_IP>:5000` — which MLflow rejects unless you add the IP to `MLFLOW_ALLOWED_HOSTS` in `docker-compose.yml`. The SSH tunnel avoids this entirely because all requests arrive with `Host: localhost`, which is always allowed.
+> **`mlflow-skinny` must be in the Airflow Docker image:** The `monitor_drift` DAG task does `import mlflow` at runtime. MLflow is not installed in the base Airflow image — the task will fail with `ModuleNotFoundError` on first run. The fix is to add `mlflow-skinny` (the lightweight client-only package, no server/UI dependencies) to the `Dockerfile`. Also pin `typing_extensions>=4.14.0` — Airflow's constraints would downgrade it to 4.12.2, breaking MLflow 3.x pydantic models at import time.
+
+> **`MLFLOW_SERVER_ALLOWED_HOSTS`, not `MLFLOW_ALLOWED_HOSTS`:** MLflow 3.x renamed this environment variable. Setting `MLFLOW_ALLOWED_HOSTS` has no effect — MLflow silently falls back to its default allowlist (localhost and RFC-1918 private IPs only), rejecting all requests from the Airflow container with a `403 Forbidden`. The error message points to the Host header value, not the variable name, so the wrong diagnosis is "add the right host to the list" rather than "check the variable name." Read the source (`security_utils.py`) when config changes have no effect — `grep MLFLOW_SERVER_ALLOWED_HOSTS` finds the correct name immediately. The value `"*"` disables host validation entirely, which is appropriate for a private EC2 instance accessed only via SSH tunnel.
 
 > **t3.medium → t3.large upgrade:** MLflow 3.x uses ~1.9 GB RAM at idle (FastAPI + SQLAlchemy + background workers). On a t3.medium (4 GB), adding MLflow alongside Airflow's scheduler, webserver, and postgres pushed the instance to near-OOM — tasks started getting killed silently. Upgrading to t3.large (8 GB) gave enough headroom for all services with ~2 GB to spare for actual inference workloads.
 
