@@ -138,7 +138,6 @@ with DAG(
         with open(manifest_path) as f:
             manifest = json.load(f)
 
-        scratch_dir = manifest["scratch_dir"]
         ck_path = os.path.join(PROJECT_DIR, "outputs", "models", "tinycnn_v3.pth")
         ck = torch.load(ck_path, map_location="cpu", weights_only=False)
 

@@ -1,0 +1,39 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint-and-validate:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install ruff
+        run: pip install ruff==0.4.4
+
+      - name: Lint
+        run: ruff check dags/ src/
+
+      - name: Validate DAG syntax
+        run: python -c "
+import ast, sys
+files = ['dags/rainforest_pipeline.py']
+for f in files:
+    with open(f) as fh:
+        source = fh.read()
+    try:
+        ast.parse(source)
+        print(f'OK: {f}')
+    except SyntaxError as e:
+        print(f'SYNTAX ERROR in {f}: {e}')
+        sys.exit(1)
+"
