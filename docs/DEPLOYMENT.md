@@ -23,6 +23,30 @@ EC2 t3.large (Airflow + Docker)
 
 ---
 
+## Quick reference
+
+| Service | URL / Command |
+|---|---|
+| Airflow UI | `http://54.166.86.66:8080` — username `admin`, password in `.env` on EC2 |
+| MLflow UI | SSH tunnel first (see below), then `http://localhost:5000` |
+| EC2 SSH | `ssh -i ~/.ssh/rainforest-key.pem ubuntu@54.166.86.66` |
+
+**MLflow SSH tunnel:**
+```bash
+ssh -i ~/.ssh/rainforest-key.pem -L 5000:localhost:5000 ubuntu@54.166.86.66
+```
+Keep the terminal open, then open `http://localhost:5000` in the browser.
+
+**Airflow password (if forgotten):**
+```bash
+ssh -i ~/.ssh/rainforest-key.pem ubuntu@54.166.86.66
+grep AIRFLOW_ADMIN_PASSWORD /opt/rainforest-audio-detection/.env
+```
+
+> **EC2 public IP changes on stop/start.** If the instance is stopped and restarted, the IP will be different. Update `MLFLOW_ALLOWED_HOSTS` in `docker-compose.yml`, run `git pull` + `docker compose up -d mlflow` on EC2, and update this table.
+
+---
+
 ## 1. AWS infrastructure
 
 ### S3
