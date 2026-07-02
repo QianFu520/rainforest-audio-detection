@@ -96,7 +96,7 @@ services:
       - "5000:5000"
     environment:
       # MLflow 3.x validates Host headers — allow the EC2 public IP and internal service name
-      MLFLOW_ALLOWED_HOSTS: "54.166.86.66,mlflow,localhost,127.0.0.1"
+      MLFLOW_ALLOWED_HOSTS: "54.166.86.66,mlflow,mlflow:5000,localhost,127.0.0.1"
     volumes:
       - mlflow_data:/mlflow
     restart: always
