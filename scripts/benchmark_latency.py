@@ -18,8 +18,7 @@ from mlflow.tracking import MlflowClient
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import config
 
-DB_PATH = os.path.join(config.OUTPUTS_DIR, "mlflow.db")
-mlflow.set_tracking_uri(f"sqlite:///{os.path.abspath(DB_PATH)}")
+mlflow.set_tracking_uri(config.MLFLOW_TRACKING_URI)
 
 BIRDNET_DIR = os.path.expanduser(
     "~/Library/Application Support/birdnet/acoustic-models/v2.4/tf"

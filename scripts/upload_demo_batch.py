@@ -86,7 +86,7 @@ def main(dry_run: bool) -> None:
         if i % 100 == 0 or i == len(batch):
             print(f"  {i}/{len(batch)} uploaded")
 
-    print(f"\nDone.")
+    print("\nDone.")
 
 
 if __name__ == "__main__":

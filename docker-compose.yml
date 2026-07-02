@@ -26,6 +26,8 @@ x-airflow-common: &airflow-common
     BIRDNET_PIPELINE_DYNAMO_TABLE: ${BIRDNET_PIPELINE_DYNAMO_TABLE:-birdnet-predictions}
     BIRDNET_PIPELINE_PROJECT_DIR: /opt/rainforest-audio-detection
     AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION:-us-east-1}
+    # MLflow tracking server — shared between DAG tasks and notebooks
+    MLFLOW_TRACKING_URI: http://mlflow:5000
     # AWS credentials not set here — EC2 IAM instance profile provides them automatically
   volumes:
     - ./dags:/opt/airflow/dags
@@ -85,6 +87,18 @@ services:
       <<: *airflow-common-env
       _AIRFLOW_DB_MIGRATE: 'true'
 
+  mlflow:
+    build:
+      context: .
+      dockerfile: Dockerfile.mlflow
+    image: rainforest-mlflow:latest
+    ports:
+      - "5000:5000"
+    volumes:
+      - mlflow_data:/mlflow
+    restart: always
+
 volumes:
   postgres_data:
   airflow_plugins:
+  mlflow_data:

@@ -366,6 +366,62 @@ with DAG(
         python_callable=write_predictions,
     )
 
+    # -----------------------------------------------------------------------
+    # Task 7: monitor_drift — log batch metrics to MLflow for drift tracking
+    # -----------------------------------------------------------------------
+    BASELINE_MEANINGFUL_RATE = 0.175   # from 1000-clip demo batch (830 bg + 170 meaningful)
+    DRIFT_THRESHOLD = 0.15             # flag if meaningful_rate deviates >15pp from baseline
+
+    def monitor_drift(**context):
+        import mlflow
+
+        manifest_path = context["ti"].xcom_pull(task_ids="birdnet_infer")
+        with open(manifest_path) as f:
+            manifest = json.load(f)
+
+        n_total      = len(manifest["local_paths"])
+        n_meaningful = len(manifest["meaningful_paths"])
+        predictions  = manifest.get("predictions", [])
+
+        meaningful_rate = n_meaningful / n_total if n_total > 0 else 0.0
+        meaningful_rate_delta = meaningful_rate - BASELINE_MEANINGFUL_RATE
+        drift_flag = 1 if abs(meaningful_rate_delta) > DRIFT_THRESHOLD else 0
+
+        mean_top1_conf = (
+            sum(p["top1_confidence"] for p in predictions) / len(predictions)
+            if predictions else 0.0
+        )
+
+        mlflow.set_tracking_uri(os.environ.get("MLFLOW_TRACKING_URI", "http://mlflow:5000"))
+        mlflow.set_experiment("pipeline_monitoring")
+
+        with mlflow.start_run(run_name=context["run_id"]):
+            mlflow.log_metrics({
+                "meaningful_rate":       round(meaningful_rate, 4),
+                "meaningful_rate_delta": round(meaningful_rate_delta, 4),
+                "mean_top1_confidence":  round(mean_top1_conf, 4),
+                "drift_flag":            float(drift_flag),
+                "n_clips_total":         float(n_total),
+                "n_meaningful":          float(n_meaningful),
+            })
+            mlflow.set_tags({
+                "dag_run_id":               context["run_id"],
+                "baseline_meaningful_rate": str(BASELINE_MEANINGFUL_RATE),
+            })
+
+        status = "DRIFT DETECTED" if drift_flag else "OK"
+        print(f"Drift monitor [{status}]: meaningful_rate={meaningful_rate:.3f} "
+              f"(baseline={BASELINE_MEANINGFUL_RATE}, delta={meaningful_rate_delta:+.3f}), "
+              f"mean_top1_conf={mean_top1_conf:.3f}")
+
+    monitor_task = PythonOperator(
+        task_id="monitor_drift",
+        python_callable=monitor_drift,
+    )
+
+    # -----------------------------------------------------------------------
+    # Task 8: cleanup_temp — delete scratch dir (runs even on upstream failure)
+    # -----------------------------------------------------------------------
     def cleanup_temp(**context):
         import shutil
         scratch_dir = os.path.join(SCRATCH_BASE, context["run_id"])
@@ -381,4 +437,4 @@ with DAG(
         trigger_rule="all_done",
     )
 
-    s3_sensor >> list_clips_task >> download_task >> tinycnn_task >> birdnet_task >> write_task >> cleanup_task
+    s3_sensor >> list_clips_task >> download_task >> tinycnn_task >> birdnet_task >> write_task >> monitor_task >> cleanup_task
