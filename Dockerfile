@@ -33,6 +33,12 @@ RUN pip install --no-cache-dir \
     soundfile==0.13.1 \
     pandas==2.3.3
 
+# MLflow skinny client — logging-only, no server/UI dependencies
+# typing_extensions pinned: MLflow 3.x needs >=4.14.0; Airflow constraints would downgrade it
+RUN pip install --no-cache-dir \
+    "mlflow-skinny==3.13.0" \
+    "typing_extensions>=4.14.0"
+
 # Copy project source code and assets into the image
 # Model weights are NOT baked in — mount outputs/models/ as a volume at runtime
 WORKDIR /opt/rainforest-audio-detection
