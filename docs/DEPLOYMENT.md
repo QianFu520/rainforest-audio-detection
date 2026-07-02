@@ -275,7 +275,63 @@ aws s3 ls s3://rainforest-audio-kwf/clips/results/ --recursive
 
 ---
 
-## 6. Updating the stack
+## 6. CI/CD (GitHub Actions)
+
+Two workflows run on every push to `main`:
+
+### CI — lint and DAG syntax check (`.github/workflows/ci.yml`)
+
+Runs in ~15 seconds. No Airflow install required.
+
+1. **Lint** — `ruff check dags/ src/` catches style and unused-variable errors
+2. **DAG syntax** — `ast.parse` on `dags/rainforest_pipeline.py` catches Python syntax errors before they reach EC2
+
+> **Why not full DAG import validation:** Validating that the DAG actually imports correctly (i.e. `airflow dags list`) would require installing Airflow and all pipeline dependencies in the runner, adding ~2 minutes per push. For a single-developer project, `ast.parse` catches the vast majority of real mistakes fast enough to be useful.
+
+> **YAML multiline gotcha:** The first CI push failed immediately (0s runtime, "workflow file issue"). The `run:` key for the DAG validation step used a bare multiline string starting with `python -c "` — YAML treats this as a double-quoted scalar and doesn't allow literal newlines inside it, so the file failed to parse before any job ran. The fix was to add `|` (literal block scalar) before the command so YAML passes the content as-is to the shell.
+
+### CD — build and push to ECR (`.github/workflows/cd.yml`)
+
+Runs in ~4-5 minutes. Triggers after CI passes.
+
+1. Authenticates to ECR using `aws-actions/amazon-ecr-login`
+2. Builds the Docker image from `Dockerfile`
+3. Pushes two tags to `298247319628.dkr.ecr.us-east-1.amazonaws.com/rainforest-airflow`:
+   - `:latest` — for easy pulls on EC2
+   - `:<git-sha>` — for traceability (pinpoint exactly which commit a running container came from)
+
+### GitHub Secrets required
+
+| Secret | Purpose |
+|---|---|
+| `AWS_ACCESS_KEY_ID` | IAM user `github-actions-ecr` — ECR push only |
+| `AWS_SECRET_ACCESS_KEY` | Same user |
+| `ECR_REGISTRY` | `298247319628.dkr.ecr.us-east-1.amazonaws.com` |
+
+The `github-actions-ecr` IAM user has the minimum permissions needed to push to ECR (`ecr:GetAuthorizationToken` globally, push actions scoped to the `rainforest-airflow` repository only). It has no access to S3, DynamoDB, or EC2.
+
+### Deploying the new image on EC2
+
+CD does not auto-deploy to EC2 — you pull manually when ready:
+
+```bash
+ssh -i ~/.ssh/rainforest-key.pem ubuntu@<EC2_PUBLIC_IP>
+cd /opt/rainforest-audio-detection
+
+aws ecr get-login-password --region us-east-1 \
+  | docker login --username AWS --password-stdin \
+    298247319628.dkr.ecr.us-east-1.amazonaws.com
+
+docker pull 298247319628.dkr.ecr.us-east-1.amazonaws.com/rainforest-airflow:latest
+docker tag 298247319628.dkr.ecr.us-east-1.amazonaws.com/rainforest-airflow:latest rainforest-airflow:latest
+docker compose up -d --force-recreate airflow-webserver airflow-scheduler
+```
+
+> **Why no auto-deploy:** Wiring GitHub Actions to SSH into EC2 or use SSM requires storing EC2 credentials in GitHub Secrets and adds operational complexity that doesn't demonstrate additional ML engineering skill. For a production system this would be a natural next step.
+
+---
+
+## 7. Updating the stack
 
 After pushing code changes:
 
@@ -285,7 +341,8 @@ cd /opt/rainforest-audio-detection
 git pull
 # DAG changes (dags/) are picked up automatically by the scheduler — no restart needed.
 
-# For Dockerfile changes, rebuild and restart:
-docker build -t rainforest-airflow:latest .
+# For Dockerfile changes, rebuild locally or pull the ECR image built by CD:
+docker pull 298247319628.dkr.ecr.us-east-1.amazonaws.com/rainforest-airflow:latest
+docker tag 298247319628.dkr.ecr.us-east-1.amazonaws.com/rainforest-airflow:latest rainforest-airflow:latest
 docker compose up -d --force-recreate airflow-webserver airflow-scheduler
 ```
