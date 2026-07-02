@@ -94,6 +94,9 @@ services:
     image: rainforest-mlflow:latest
     ports:
       - "5000:5000"
+    environment:
+      # MLflow 3.x validates Host headers — allow the EC2 public IP and internal service name
+      MLFLOW_ALLOWED_HOSTS: "44.212.7.36,mlflow,localhost,127.0.0.1"
     volumes:
       - mlflow_data:/mlflow
     restart: always
